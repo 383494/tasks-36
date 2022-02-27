@@ -4,12 +4,14 @@
 题目来源：https://codebus.cn/yangw/36-tasks-g1
 
 #### 软件架构
-软件架构说明
+无
 
 
 #### 安装教程
 
-1.  无
+1.  Linux用户：在终端中运行./*/main即可使用
+2.  Windows用户：等我上传Windows版本
+3.  其他用户：用SDL2编译源码即可使用
 
 #### 使用说明
 

@@ -111,6 +111,8 @@ int main(int argc, char *argv[])
 	//srand((unsigned int)SDL_GetTicks());
 
 	SDL_SetRenderDrawColor(ren, 0, 255, 0, 255);
+
+	//这部分被我不小心删了
 	
 	
 	//unsigned int tick = 0;
