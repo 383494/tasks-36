@@ -1,4 +1,4 @@
-// 2022/2/26
+// 2022/2/28
 
 #include<SDL2/SDL.h>
 //#include<SDL2/SDL_ttf.h>
@@ -62,6 +62,20 @@ void drawcircle(int x, int y, int r){
 	}
 }
 
+void drawhalfcircle(int x, int y, int r, float theta){
+	SDL_SetRenderDrawColor(ren, 255,255,255,255);
+	for(float i=0;i<=PI;i+=0.01){
+		SDL_RenderDrawLine(ren, x+(r-0)*SDL_cos(theta+i),y+(r-0)*SDL_sin(theta+i)
+							,x+(r+1)*SDL_cos(theta+i),y+(r+1)*SDL_sin(theta+i));
+	}
+	SDL_SetRenderDrawColor(ren, 0,0,0,255);
+	for(float i=PI;i<=2*PI;i+=0.01){
+		SDL_RenderDrawLine(ren, x+(r-0)*SDL_cos(theta+i),y+(r-0)*SDL_sin(theta+i)
+							,x+(r+1)*SDL_cos(theta+i),y+(r+1)*SDL_sin(theta+i));
+	}
+	//printf("%lf",theta);
+}
+
 void fillcircle(int x, int y, int r){
 	drawcircle(x,y,r);
 	for(int curx=x-r;curx<=x+r;curx++){
@@ -110,8 +124,21 @@ int main(int argc, char *argv[])
 
 	//srand((unsigned int)SDL_GetTicks());
 
-	SDL_SetRenderDrawColor(ren, 0, 255, 0, 255);
+	SDL_SetRenderDrawColor(ren, 128, 255, 0, 255);
+	SDL_RenderClear(ren);
 	
+	int x=40, y=40;
+	while(x<=600){
+		while(y<=440){
+			SDL_SetRenderDrawColor(ren, 128, 0, 128, 255);
+			fillcircle(x, y, 15);
+			drawhalfcircle(x, y, 15, PI/4.0*((x-y)/40));
+			y+=40;
+		}
+		x+=40, y=40;
+	}
+
+	SDL_RenderPresent(ren);
 	
 	//unsigned int tick = 0;
     SDL_bool looping = SDL_TRUE;

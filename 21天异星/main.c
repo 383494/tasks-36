@@ -1,5 +1,4 @@
-// 2022/2/26
-// 2022/2/28补档（做完不小心删了然后重新做了一次）
+// 2022/2/28
 
 #include<SDL2/SDL.h>
 //#include<SDL2/SDL_ttf.h>
@@ -75,13 +74,43 @@ SDL_bool insideRect(int x, int y, SDL_Rect rect){
     return (x>=rect.x && x<=rect.x+rect.w && y>=rect.y && y<=rect.y+rect.h);
 }
 
-int prand(double* P){
-	int ret = 0; 
-	double tmp = (double)rand()/(double)RAND_MAX;
-	do{
-		if(tmp<=P[ret])return ret;
-		else tmp-=P[ret];
-	}while(++ret);
+typedef struct Ballstr{
+	int x;
+	int y;
+	int v;
+	int angle;
+	int r,g,b;
+} Ball;
+
+void updateball(Ball* bp, SDL_Rect rect){
+	SDL_SetRenderDrawColor(ren, bp->r, bp->g, bp->b, 255);
+	fillcircle(bp->x,bp->y,20);
+	bp->x+=(int)SDL_floor(0.5+ bp->v*SDL_cos(bp->angle*PI/180.0));
+	bp->y+=(int)SDL_floor(0.5+ bp->v*SDL_sin(bp->angle*PI/180.0));
+	if((bp->x-25<=rect.x||bp->x+25>=rect.x+rect.w)&&
+			(bp->y+25>=rect.y+rect.h||bp->y-25<=rect.y)){
+		bp->angle+=180;
+		bp->angle%=360;
+	}
+	else if(bp->x-25<=rect.x||bp->x+25>=rect.x+rect.w//检测碰撞
+		){
+		bp->angle=180-bp->angle;
+		bp->angle%=360;
+	}else if(bp->y+25>=rect.y+rect.h||bp->y-25<=rect.y){
+		bp->angle=-bp->angle;
+		bp->angle%=360;
+	}
+	
+}
+
+void initball(Ball* bp){
+	bp->x = rand()/(double)RAND_MAX*550+50;
+	bp->y = rand()/(double)RAND_MAX*400+50;
+	bp->v = 10;
+	bp->angle = 45+90*(rand()%4);
+	bp->r = rand()/(double)RAND_MAX*255;
+	bp->g = rand()/(double)RAND_MAX*225;
+	bp->b = rand()/(double)RAND_MAX*225;
 }
 
 int main(int argc, char *argv[])
@@ -120,43 +149,45 @@ int main(int argc, char *argv[])
 
 	srand((unsigned int)SDL_GetTicks());
 
-	SDL_SetRenderDrawColor(ren, 255, 0, 0, 255);
+	SDL_Rect rect={0,0,640,480};
 
-	// x’ = a * x + b * y + e
-	// y’ = c * x + d * y + f
-	// p = 概率
-	// x、y 值范围：0 ~ 1
-	double a[5] = { 0.35173,  0.35338, 0.5,    0.5154,   0.00364 };
-	double b[5] = { 0.35537, -0.3537,  0,     -0.0018,   0 };
-	double c[5] = {-0.35537,  0.35373, 0,      0.00157,  0 };
-	double d[5] = { 0.35173,  0.35338, 0.5,    0.58795,  0.57832 };
-	double e[5] = { 0.3545,   0.2879,  0.25,   0.2501,   0.5016 };
-	double f[5] = { 0.5,      0.1528,  0.462,  0.1054,   0.0606 };
-	double p[5] = { 0.1773,   0.38,    0.1773, 0.2091,   0.0563 };
-
-	double x, y;
-	x=(double)rand()/(double)RAND_MAX;
-	y=(double)rand()/(double)RAND_MAX;
-	int n=0;
-	
-	for(int i=0;i<50000;i++){
-		n=prand(p);
-		x=a[n]*x+b[n]*y+e[n];
-		y=c[n]*x+d[n]*y+f[n];
-		SDL_RenderDrawPoint(ren, 480*x, 480-480*y);
+    struct Ballstr *balls;
+	int ballnum=10;
+	balls = (struct Ballstr*)SDL_calloc(10, sizeof(struct Ballstr));
+	for(int i=0;i<ballnum;i++){
+		initball(balls+i);
 	}
-	SDL_RenderPresent(ren);
 
 	//unsigned int tick = 0;
     SDL_bool looping = SDL_TRUE;
 	while(looping){
-		
+		SDL_SetRenderDrawColor(ren,255,255,255,255);
+		SDL_RenderClear(ren);
+		for(int i=0;i<ballnum;i++){
+			updateball(balls+i, rect);
+		}
+		SDL_RenderPresent(ren);
+
 		SDL_Delay(20);
 		//tick++;
 		while(SDL_PollEvent(&ev)){
 			switch(ev.type){
 				case SDL_QUIT:
 					looping = SDL_FALSE;
+					break;
+				case SDL_KEYDOWN:
+					switch(ev.key.keysym.scancode){
+						case SDL_SCANCODE_EQUALS:
+							ballnum++;
+							balls=(struct Ballstr*)SDL_realloc(balls,ballnum*sizeof(struct Ballstr));
+							initball(balls+ballnum-1);
+							break;
+						case SDL_SCANCODE_MINUS:
+							if(ballnum==0)break;
+							ballnum--;
+							balls=(struct Ballstr*)SDL_realloc(balls,ballnum*sizeof(struct Ballstr));
+							break;
+					}
 					break;
 				
 			}
