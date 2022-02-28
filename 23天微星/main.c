@@ -100,8 +100,6 @@ void snow(SDL_FPoint pta, SDL_FPoint ptb, unsigned int layer){
 	pts[3].x=(pts[0].x+2*pts[4].x)/3.0, pts[3].y=(pts[0].y+2*pts[4].y)/3.0;
 	pts[2].x=(pts[0].x+pts[4].x)/2.0+(pts[0].y-pts[4].y)/2.0/SDL_sqrt(3);
 	pts[2].y=(pts[0].y+pts[4].y)/2.0-(pts[0].x-pts[4].x)/2.0/SDL_sqrt(3);
-	//for(int i=0;i<5;i++)pts[i].y=480-pts[i].y;
-	//printf("%lf,%lf",pts[0].y,pts[4].y);
 	
 	if(layer==0){
 		//SDL_SetRenderDrawColor(ren, 255,255,255,255);
