@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
 	unsigned int tick = 0;
     SDL_bool looping = SDL_TRUE;
 	while(looping){
-		if(tick%20==0){
+		if(tick%2==0){
 			SDL_SetRenderDrawColor(ren, 255, 255, 255,255);
 			SDL_RenderClear(ren);
 			SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
@@ -136,14 +136,13 @@ int main(int argc, char *argv[])
 			if(canplace){
 				if(++quno == 9){				//放完了
 
-					//输出结果\
+					//输出结果
 					/*
 					i = 0;
 					while(++i <= 8){
 						printf("%d",queen[i]);
 						//queen[i] = 0;
 					}
-					//printf("%d",queen[i]);
 					printf("\t");
 					//*/\
 					solveflag = SDL_TRUE;
@@ -159,7 +158,7 @@ int main(int argc, char *argv[])
 					}
 				}
 			}
-
+			if(solveflag)SDL_SetRenderDrawColor(ren, 127,0,255,255);
 			SDL_Rect rect = {0,0,40,40};
 			for(i=quno;i>0;i--){
 				//printf("%d",queen[i]);
@@ -168,6 +167,10 @@ int main(int argc, char *argv[])
 				SDL_RenderFillRect(ren, &rect);
 			}
 			SDL_RenderPresent(ren);
+			if(solveflag){
+				SDL_Delay(1000);
+				solveflag = SDL_FALSE;
+			}
 			//printf("\t");
 		}
 
