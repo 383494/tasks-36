@@ -1,5 +1,4 @@
 // 2022/3/2
-// 有时会出问题，但我不知道哪里出问题了
 
 #include<SDL2/SDL.h>
 //#include<SDL2/SDL_ttf.h>
