@@ -3,7 +3,7 @@
 #include<SDL2/SDL.h>
 #include<SDL2/SDL_ttf.h>
 #include<stdio.h>
-//#include<math.h>
+#undef main
 #define PI 3.1415926535897932
 
 SDL_Window* win = NULL;

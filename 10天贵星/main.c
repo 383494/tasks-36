@@ -2,6 +2,7 @@
 
 #include<SDL2/SDL.h>
 #include<stdio.h>
+#undef main
 #define PI 3.1415926535897932
 
 SDL_Window* win = NULL;

@@ -3,6 +3,7 @@
 #include<SDL2/SDL.h>
 #include<stdio.h>
 //#include<SDL2/SDL_ttf.h>
+#undef main
 #define PI 3.1415926535897932
 
 

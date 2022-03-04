@@ -1,11 +1,9 @@
 /// 最后修改:2021/2/18
 
-/// 需要用g++编译
-/// gcc会报错round函数
-
 #include<SDL2/SDL.h>
 #include<SDL2/SDL_image.h>
 #include<math.h>
+#undef main
 
 SDL_Window* win = NULL;
 SDL_Surface* winSurface = NULL;
