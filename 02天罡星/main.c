@@ -1,7 +1,7 @@
 // 2021/2/18
 
 #include<SDL2/SDL.h>
-#include<SDL2/SDL_image.h>
+#include<stdio.h>
 #include<math.h>
 #undef main
 #define PI 3.1415927
