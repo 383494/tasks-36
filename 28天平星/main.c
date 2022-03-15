@@ -151,7 +151,6 @@ int main(int argc, char* argv[])
 
 	loadmap();
 
-	px = 0, py = 0;
 	//unsigned int tick = 0;
 
 	playermove(0, 0);
@@ -281,7 +280,7 @@ void loadmap() {
 		puts("");
 	}
 
-	while(fgetc(fp) != '\n');
+	fscanf(fp, "%d,%d", &px, &py);
 
 	for (int y = 0; y < mapsizey; y++) {
 		for (int x = 0; x < mapsizex-1; x++) {
