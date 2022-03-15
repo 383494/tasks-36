@@ -1,4 +1,4 @@
-// 2022/3/14
+// 2022/3/15
 #define _CRT_SECURE_NO_WARNINGS
 
 #include<SDL2/SDL.h>
@@ -24,8 +24,8 @@ enum {
 	, BLOCK_TOTAL
 };
 
-int map[10][10];
-int goal[10][10]; //BLOCK_AIR==未指定
+int** map = NULL;
+int** goal = NULL; //BLOCK_AIR==未指定
 int mapsizex = 0, mapsizey = 0;
 
 SDL_Texture* pic[BLOCK_TOTAL] = { NULL };
@@ -149,11 +149,7 @@ int main(int argc, char* argv[])
 	}
 	playerpic = IMG_LoadTexture(ren, "player.jpg");
 
-	map[1][1] = BLOCK_BOX;
-	map[1][2] = BLOCK_BOX;
-	map[2][3] = BLOCK_STONE;
-	map[5][5] = BLOCK_WALL;
-	goal[5][7] = BLOCK_BOX;
+	loadmap();
 
 	px = 0, py = 0;
 	//unsigned int tick = 0;
@@ -260,24 +256,42 @@ bool playermove(int dx, int dy) {//负责计算和绘制
 	return true;
 }
 
-//void loadmap() {
-//	FILE* fp;
-//	fp = fopen("map.txt", "r");
-//	if (fp == NULL) {
-//		mapsizex = 10;
-//		mapsizey = 10;
-//	}
-//	else fscanf(fp, "%d,%d", &mapsizex, &mapsizey);
-//
-//	map = (int**)calloc(mapsizex, sizeof(void*));
-//	for (int i = 0; i < mapsizex; i++)map[i] = (int*)calloc(mapsizey, sizeof(int));
-//
-//	if (fp != NULL) {
-//		for (int y = 0; y < mapsizey; y++) {
-//			for (int x = 0; x < mapsizex; x++) {
-//				fscanf(fp, "%d,", map[x] + y);
-//				printf("%d", map[x][y]);
-//			}
-//		}
-//	}
-//}
+void loadmap() {
+	FILE* fp;
+	fp = fopen("map.txt", "r");
+	if (fp == NULL) {
+		mapsizex = 10;
+		mapsizey = 10;
+	}
+	else fscanf(fp, "%d,%d", &mapsizex, &mapsizey);
+
+	map = (int**)calloc(mapsizex, sizeof(void*));
+	goal = (int**)calloc(mapsizex, sizeof(void*));
+
+	for (int i = 0; i < mapsizex; i++)map[i] = (int*)calloc(mapsizey, sizeof(int));
+	for (int i = 0; i < mapsizex; i++)goal[i] = (int*)calloc(mapsizey, sizeof(int));
+
+	if (fp == NULL)return;
+	for (int y = 0; y < mapsizey; y++) {
+		for (int x = 0; x < mapsizex-1; x++) {
+			fscanf(fp, "%d,", map[x] + y);
+			printf("%d", map[x][y]);
+		}
+		fscanf(fp, "%d", map[mapsizex-1] + y);
+		puts("");
+	}
+
+	while(fgetc(fp) != '\n');
+
+	for (int y = 0; y < mapsizey; y++) {
+		for (int x = 0; x < mapsizex-1; x++) {
+			fscanf(fp, "%d,", goal[x] + y);
+			printf("%d", goal[x][y]);
+		}
+		fscanf(fp, "%d", goal[mapsizex-1] + y);
+		puts("");
+	}
+
+	fclose(fp);
+}
+
