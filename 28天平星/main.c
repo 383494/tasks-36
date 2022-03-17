@@ -1,4 +1,4 @@
-// 2022/3/15
+// 2022/3/17
 #define _CRT_SECURE_NO_WARNINGS
 
 #include<SDL2/SDL.h>
@@ -6,9 +6,18 @@
 #include<SDL2/SDL_image.h>
 #include<stdio.h>
 #include<stdbool.h>
-#pragma comment(lib,"SDL2_image.lib")
+
 #undef main
-#define PI 3.1415926535897932
+#undef MIN
+#undef MAX
+#define MIN(a,b) ((a)<(b)?(a):(b))
+#define MAX(a,b) ((a)>(b)?(a):(b))
+
+const int SCRWID = 10;//*50
+const int SCRHEI = 10;//*50
+const int LEFTLEN = 10;//px
+const int TOPLEN = 10;
+const int TEXTLEN = 100;//右侧提示文字长度
 
 SDL_Window* win = NULL;
 SDL_Surface* winSurface = NULL;
@@ -21,24 +30,16 @@ enum {
 	, BLOCK_WALL
 	, BLOCK_BOX
 	, BLOCK_STONE//能推，但没什么用
+	, BLOCK_PISTON//todo
+	, BLOCK_PISTON_ARM
 	, BLOCK_TOTAL
 };
 
-int** map = NULL;
-int** goal = NULL; //BLOCK_AIR==未指定
+int** map = NULL, **datamap = NULL, **goal = NULL; //BLOCK_AIR==未指定
 int mapsizex = 0, mapsizey = 0;
 
 SDL_Texture* pic[BLOCK_TOTAL] = { NULL };
-SDL_Texture* playerpic = NULL;
-
-void drawpol(float x, float y, float r, int sides) {
-	SDL_FPoint pts[2];
-	for (int i = 0; i <= sides; i++) {
-		pts[i % 2].x = x + r * SDL_cosf(PI * 2 * i / (float)sides - PI / 2.0);
-		pts[i % 2].y = y + r * SDL_sinf(PI * 2 * i / (float)sides - PI / 2.0);
-		SDL_RenderDrawLinesF(ren, pts, 2);
-	}
-}
+SDL_Texture* playerpic = NULL, *errorpic = NULL;
 
 void quitall() {
 	if (winSurface)
@@ -71,33 +72,14 @@ void DrawText(SDL_Surface* screen, TTF_Font* font, const char* text, int x, int 
 }
 #endif
 
-void drawcircle(int x, int y, int r) {
-	int ody = 0;//old dy
-	int dy = 0;
-	for (int curx = x - r + 1; curx <= x + r; curx++) {
-		dy = SDL_floor(0.5 + SDL_sqrt((r + curx - x) * (r - curx + x)));
-		SDL_RenderDrawLine(ren, curx, y + dy, curx - 1, y + ody);
-		SDL_RenderDrawLine(ren, curx, y - dy, curx - 1, y - ody);
-		ody = dy;
-	}
-}
-
-void fillcircle(int x, int y, int r) {
-	drawcircle(x, y, r);
-	for (int curx = x - r; curx <= x + r; curx++) {
-		int dy = SDL_floor(0.5 + SDL_sqrt((r + curx - x) * (r - curx + x)));
-		SDL_RenderDrawLine(ren, curx, y + dy, curx, y - dy);
-	}
-}
-
-bool insideRect(int x, int y, SDL_Rect rect) {
-	return (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h);
-}
-
-int px, py;
+unsigned int playerx, playery;
+unsigned int camerax = 0, cameray = 0;
 
 bool playermove(int dx, int dy);//dx*dy==0,dx+dy!=0
+bool pushbox(int x, int y, int dx, int dy);
+void drawscr();
 
+void setRectPos(SDL_Rect* rect, int xn, int yn);
 void loadmap();
 
 int main(int argc, char* argv[])
@@ -108,9 +90,10 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	win = SDL_CreateWindow(u8"title"
+	win = SDL_CreateWindow(u8"\u63a8\u7bb1\u5b50\u6e38\u620f"
 		, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED
-		, 500, 500, SDL_WINDOW_SHOWN);
+		, 2*LEFTLEN + SCRWID*50 + TEXTLEN, 2*TOPLEN + SCRHEI*50
+		, SDL_WINDOW_SHOWN);
 	if (!win) {
 		printf("Error to create window: %s", SDL_GetError());
 		quitall();
@@ -131,33 +114,45 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	if (IMG_Init(IMG_INIT_JPG) == 0) {
+	if (IMG_Init(IMG_INIT_PNG) == 0) {
 		printf("Error to init img: %s", SDL_GetError());
 		quitall();
 		return 1;
 	}
 
-	//srand((unsigned int)SDL_GetTicks());
-	SDL_Rect rect = { 0,0,50,50 };
-
-
 	// 加载图片
-	char filename[9];
+	char filename[15];
 	for (int i = 0; i < BLOCK_TOTAL; i++) {
-		sprintf(filename, "%d.jpg", i);
+		sprintf(filename, "img/%d.png", i);
 		pic[i] = IMG_LoadTexture(ren, filename);
+		SDL_SetTextureBlendMode(pic[i], SDL_BLENDMODE_BLEND);
 	}
-	playerpic = IMG_LoadTexture(ren, "player.jpg");
+	playerpic = IMG_LoadTexture(ren, "img/player.png");
+	SDL_SetTextureBlendMode(playerpic, SDL_BLENDMODE_BLEND);
+	errorpic = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, 2, 2);
+	SDL_SetRenderTarget(ren, errorpic);
+	SDL_SetRenderDrawColor(ren, 163, 73, 164, 255);
+	SDL_RenderDrawPoint(ren, 0, 0);
+	SDL_RenderDrawPoint(ren, 1, 1);
+	SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
+	SDL_RenderDrawPoint(ren, 0, 1);
+	SDL_RenderDrawPoint(ren, 1, 0);
+	//SDL_RenderPresent(ren);
+	SDL_SetRenderTarget(ren, NULL);
 
 	loadmap();
+	camerax = MAX(MIN(playerx, mapsizex-SCRWID/2), SCRWID/2) - SCRWID/2;
+	cameray = MAX(MIN(playery, mapsizey-SCRHEI/2), SCRHEI/2) - SCRHEI/2;
 
-	//unsigned int tick = 0;
+	SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+	SDL_RenderClear(ren);
 
-	playermove(0, 0);
+	SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
+	SDL_RenderDrawLine(ren, SCRWID*50+2*LEFTLEN, 0, SCRWID*50+2*LEFTLEN, SCRHEI*50+2*TOPLEN);
+	drawscr();
 
 	SDL_bool looping = SDL_TRUE;
 	while (looping) {
-
 		SDL_Delay(20);
 		//tick++;
 		while (SDL_PollEvent(&ev)) {
@@ -193,66 +188,107 @@ int main(int argc, char* argv[])
 			SDL_DestroyTexture(pic[i]);
 	}
 
+	for(int x = 0; x < mapsizex; x++){
+		free(map[x]);
+		free(datamap[x]);
+		free(goal[x]);
+	}
+	free(map);
+	free(datamap);
+	free(goal);
+
+	for(int i = 0; i < BLOCK_TOTAL; i++){
+		if(pic[i] != NULL)SDL_DestroyTexture(pic[i]);
+	}
+	if(playerpic != NULL)
+		SDL_DestroyTexture(playerpic);
+	SDL_DestroyTexture(errorpic);
+
 	IMG_Quit();
-
-	//	SDL_RenderPresent(ren);
-	//	SDL_UpdateWindowSurface(win);
-
 	quitall();
-
 	return 0;
 }
 
-bool playermove(int dx, int dy) {//负责计算和绘制
+void setRectPos(SDL_Rect* rect, int xn, int yn){
+	rect->x = 50 * (xn - camerax) + LEFTLEN;
+	rect->y = 50 * (yn - cameray) + TOPLEN;
+}
+
+bool playermove(int dx, int dy) {
+	if(!pushbox(playerx, playery, dx, dy))return false;
+	
+	playerx += dx, playery += dy;
+	if (playerx < 0 || playerx >= mapsizex || playery < 0 || playery >= mapsizey)playerx -= dx, playery -= dy;
+
+	camerax = MAX(MIN(playerx, mapsizex-SCRWID/2), SCRWID/2) - SCRWID/2;
+	cameray = MAX(MIN(playery, mapsizey-SCRHEI/2), SCRHEI/2) - SCRHEI/2;
+
+	drawscr();
+
+	return true;
+}
+
+bool pushbox(int x, int y, int dx, int dy){
 	if (dx != 0 && dy != 0)return false;
 	if (dx != 0 || dy != 0) {
-		int cx = px;
-		int cy = py;
-
+		int cx=x, cy=y;
 		//计算
 		while (true) {
 			cx += dx, cy += dy;
-			if (cx < 0 || cx>9 || cy < 0 || cy>9)break;
+			if (cx < 0 || cx >= mapsizex || cy < 0 || cy >= mapsizey)break;
 			if (map[cx][cy] == BLOCK_AIR) {
 				cx += dx, cy += dy;
 				break;
 			}
 			if (map[cx][cy] == BLOCK_WALL)return false;
 		}
+	
+		//填充数组
 		while (true) {
 			cx -= dx, cy -= dy;
-			if (cx == px && cy == py)break;
+			if (cx == x && cy == y)break;
 			map[cx][cy] = map[cx - dx][cy - dy];
 		}
 		map[cx][cy] = BLOCK_AIR;
-		px += dx, py += dy;
-		if (px < 0 || px>9 || py < 0 || py>9)px -= dx, py -= dy;
 	}
-	SDL_Rect dst = { 0,0,50,50 };
-	SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
-	SDL_RenderClear(ren);
+	return true;
+}
 
-	dst.x = 50 * px, dst.y = 50 * py;
+void drawscr(){
+	
+	SDL_Rect dst = { LEFTLEN-1, TOPLEN-1, SCRWID*50+2, SCRHEI*50+2 };
+
+	SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+	SDL_RenderFillRect(ren, &dst);
+
+	dst.w = 50, dst.h = 50;
+	setRectPos(&dst, playerx, playery);
 	SDL_RenderCopy(ren, playerpic, NULL, &dst);
 
-	for (int x = 0; x < 10; x++) {
-		for (int y = 0; y < 10; y++) {
-			dst.x = 50 * x, dst.y = 50 * y;
-			SDL_RenderCopy(ren, pic[map[x][y]], NULL, &dst);
+	SDL_Texture* srcpic = NULL;
+	for (int x = camerax; x < camerax+10; x++) {
+		for (int y = cameray; y < cameray+10; y++) {
+			setRectPos(&dst, x, y);
+			if(map[x][y] < BLOCK_TOTAL)srcpic = pic[map[x][y]];
+			else srcpic = errorpic;
+			SDL_RenderCopy(ren, srcpic, NULL, &dst);
 			if (goal[x][y] != BLOCK_AIR) {
-				SDL_SetTextureBlendMode(pic[goal[x][y]], SDL_BLENDMODE_BLEND);
-				SDL_SetTextureAlphaMod(pic[goal[x][y]], 255 / 3);
-				SDL_RenderCopy(ren, pic[goal[x][y]], NULL, &dst);
-				SDL_SetTextureAlphaMod(pic[goal[x][y]], 255);
+				if(goal[x][y] < BLOCK_TOTAL)srcpic = pic[goal[x][y]];
+				else srcpic = errorpic;
+				SDL_SetTextureAlphaMod(srcpic, 255 / 3);
+				SDL_RenderCopy(ren, srcpic, NULL, &dst);
+				SDL_SetTextureAlphaMod(srcpic, 255);
 			}
 		}
 	}
 
+	SDL_SetRenderDrawColor(ren, 255, 0, 0, 255);
+	if(camerax == 0)SDL_RenderDrawLine(ren, LEFTLEN-1, TOPLEN-1, LEFTLEN-1, SCRHEI*50+TOPLEN);
+	if(cameray == 0)SDL_RenderDrawLine(ren, LEFTLEN-1, TOPLEN-1, SCRWID*50+LEFTLEN, TOPLEN-1);
+	if(camerax+SCRWID == mapsizex)SDL_RenderDrawLine(ren, SCRWID*50+LEFTLEN, TOPLEN-1, SCRWID*50+LEFTLEN, SCRHEI*50+TOPLEN);
+	if(cameray+SCRHEI == mapsizey)SDL_RenderDrawLine(ren, LEFTLEN-1, SCRHEI*50+TOPLEN, SCRWID*50+LEFTLEN, SCRHEI*50+TOPLEN);
 
 	SDL_RenderPresent(ren);
-
-
-	return true;
 }
 
 void loadmap() {
@@ -264,33 +300,36 @@ void loadmap() {
 	}
 	else fscanf(fp, "%d,%d", &mapsizex, &mapsizey);
 
+	while(fgetc(fp)!='\n');
+
 	map = (int**)calloc(mapsizex, sizeof(void*));
+	datamap = (int**)calloc(mapsizex, sizeof(void*));
 	goal = (int**)calloc(mapsizex, sizeof(void*));
 
 	for (int i = 0; i < mapsizex; i++)map[i] = (int*)calloc(mapsizey, sizeof(int));
+	for (int i = 0; i < mapsizex; i++)datamap[i] = (int*)calloc(mapsizey, sizeof(int));
 	for (int i = 0; i < mapsizex; i++)goal[i] = (int*)calloc(mapsizey, sizeof(int));
 
 	if (fp == NULL)return;
 	for (int y = 0; y < mapsizey; y++) {
 		for (int x = 0; x < mapsizex-1; x++) {
 			fscanf(fp, "%d,", map[x] + y);
-			printf("%d", map[x][y]);
 		}
 		fscanf(fp, "%d", map[mapsizex-1] + y);
-		puts("");
 	}
 
-	fscanf(fp, "%d,%d", &px, &py);
+	fscanf(fp, "%d,%d", &playerx, &playery);
+
+	while(fgetc(fp)!='\n');
 
 	for (int y = 0; y < mapsizey; y++) {
 		for (int x = 0; x < mapsizex-1; x++) {
 			fscanf(fp, "%d,", goal[x] + y);
-			printf("%d", goal[x][y]);
 		}
 		fscanf(fp, "%d", goal[mapsizex-1] + y);
-		puts("");
 	}
+
+	while(fgetc(fp)!='\n');
 
 	fclose(fp);
 }
-
