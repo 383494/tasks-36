@@ -1,8 +1,6 @@
-// 2022/3/17
-#define _CRT_SECURE_NO_WARNINGS
-
+// 2022/3/18
 #include<SDL2/SDL.h>
-//#include<SDL2/SDL_ttf.h>
+#include<SDL2/SDL_ttf.h>
 #include<SDL2/SDL_image.h>
 #include<stdio.h>
 #include<stdbool.h>
@@ -17,7 +15,8 @@ const int SCRWID = 10;//*50
 const int SCRHEI = 10;//*50
 const int LEFTLEN = 10;//px
 const int TOPLEN = 10;
-const int TEXTLEN = 100;//右侧提示文字长度
+const int FONTSIZE = 30;//字号
+const int TEXTLEN = 5*FONTSIZE;//右侧提示文字长度
 
 SDL_Window* win = NULL;
 SDL_Surface* winSurface = NULL;
@@ -25,21 +24,28 @@ SDL_Renderer* ren = NULL;
 SDL_Texture* tex = NULL;
 SDL_Event ev;
 
-enum {
+typedef enum {
 	BLOCK_AIR
 	, BLOCK_WALL
 	, BLOCK_BOX
 	, BLOCK_STONE//能推，但没什么用
-	, BLOCK_PISTON//todo
-	, BLOCK_PISTON_ARM
+	, BLOCK_PISTON//todo,PISTON_ARM是特殊值之一
+	, BLOCK_REDSTONE
 	, BLOCK_TOTAL
-};
+} blocktype;
 
-int** map = NULL, **datamap = NULL, **goal = NULL; //BLOCK_AIR==未指定
+typedef struct{
+	blocktype type;
+	int data;
+} block;
+
+block** map = NULL;
+blocktype **goal = NULL; //BLOCK_AIR==未指定
 int mapsizex = 0, mapsizey = 0;
 
 SDL_Texture* pic[BLOCK_TOTAL] = { NULL };
 SDL_Texture* playerpic = NULL, *errorpic = NULL;
+TTF_Font *font = NULL;
 
 void quitall() {
 	if (winSurface)
@@ -54,11 +60,11 @@ void quitall() {
 }
 
 #ifdef SDL_TTF_H_
-void DrawText(SDL_Surface* screen, TTF_Font* font, const char* text, int x, int y)
+void DrawText(TTF_Font* font, const char* text, int x, int y, int r, int g, int b)
 {
-	SDL_Color white = { 255,255,255 };
+	SDL_Color color = { r, g, b };
 	SDL_Surface* textSfc = NULL;
-	textSfc = TTF_RenderUTF8_Solid(font, text, white);
+	textSfc = TTF_RenderUTF8_Solid(font, text, color);
 	SDL_Texture* text_texture = SDL_CreateTextureFromSurface(ren, textSfc);
 	SDL_Rect dest = { 0, 0, textSfc->w, textSfc->h };
 	SDL_Rect rect;
@@ -72,8 +78,10 @@ void DrawText(SDL_Surface* screen, TTF_Font* font, const char* text, int x, int 
 }
 #endif
 
-unsigned int playerx, playery;
+unsigned int playerx = 0, playery = 0;
 unsigned int camerax = 0, cameray = 0;
+unsigned int leftGoals = 0;//剩余目标数
+unsigned int stepCount = 0;//步数
 
 bool playermove(int dx, int dy);//dx*dy==0,dx+dy!=0
 bool pushbox(int x, int y, int dx, int dy);
@@ -90,7 +98,7 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	win = SDL_CreateWindow(u8"\u63a8\u7bb1\u5b50\u6e38\u620f"
+	win = SDL_CreateWindow(u8"推箱子游戏"
 		, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED
 		, 2*LEFTLEN + SCRWID*50 + TEXTLEN, 2*TOPLEN + SCRHEI*50
 		, SDL_WINDOW_SHOWN);
@@ -115,10 +123,27 @@ int main(int argc, char* argv[])
 	}
 
 	if (IMG_Init(IMG_INIT_PNG) == 0) {
-		printf("Error to init img: %s", SDL_GetError());
+		printf("Error to init img: %s", IMG_GetError());
 		quitall();
 		return 1;
 	}
+
+	if (TTF_Init() != 0){
+		printf("Error to init font: %s", TTF_GetError());
+		IMG_Quit();
+		quitall();
+		return 1;
+	}
+	SDL_Surface* text=NULL;
+	font = TTF_OpenFont("./font", FONTSIZE);
+	if(!font){
+		printf("Error to open font: %s",TTF_GetError());
+		TTF_Quit();
+		IMG_Quit();
+		quitall();
+		return 1;
+	}
+	TTF_SetFontStyle(font,TTF_STYLE_NORMAL);
 
 	// 加载图片
 	char filename[15];
@@ -137,7 +162,6 @@ int main(int argc, char* argv[])
 	SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
 	SDL_RenderDrawPoint(ren, 0, 1);
 	SDL_RenderDrawPoint(ren, 1, 0);
-	//SDL_RenderPresent(ren);
 	SDL_SetRenderTarget(ren, NULL);
 
 	loadmap();
@@ -190,11 +214,9 @@ int main(int argc, char* argv[])
 
 	for(int x = 0; x < mapsizex; x++){
 		free(map[x]);
-		free(datamap[x]);
 		free(goal[x]);
 	}
 	free(map);
-	free(datamap);
 	free(goal);
 
 	for(int i = 0; i < BLOCK_TOTAL; i++){
@@ -204,6 +226,7 @@ int main(int argc, char* argv[])
 		SDL_DestroyTexture(playerpic);
 	SDL_DestroyTexture(errorpic);
 
+	TTF_Quit();
 	IMG_Quit();
 	quitall();
 	return 0;
@@ -218,13 +241,16 @@ bool playermove(int dx, int dy) {
 	if(!pushbox(playerx, playery, dx, dy))return false;
 	
 	playerx += dx, playery += dy;
-	if (playerx < 0 || playerx >= mapsizex || playery < 0 || playery >= mapsizey)playerx -= dx, playery -= dy;
+	if (playerx < 0 || playerx >= mapsizex || playery < 0 || playery >= mapsizey){
+		playerx -= dx, playery -= dy;
+		return false;
+	}
 
 	camerax = MAX(MIN(playerx, mapsizex-SCRWID/2), SCRWID/2) - SCRWID/2;
 	cameray = MAX(MIN(playery, mapsizey-SCRHEI/2), SCRHEI/2) - SCRHEI/2;
 
+	stepCount++;
 	drawscr();
-
 	return true;
 }
 
@@ -236,11 +262,11 @@ bool pushbox(int x, int y, int dx, int dy){
 		while (true) {
 			cx += dx, cy += dy;
 			if (cx < 0 || cx >= mapsizex || cy < 0 || cy >= mapsizey)break;
-			if (map[cx][cy] == BLOCK_AIR) {
+			if (map[cx][cy].type == BLOCK_AIR) {
 				cx += dx, cy += dy;
 				break;
 			}
-			if (map[cx][cy] == BLOCK_WALL)return false;
+			if (map[cx][cy].type == BLOCK_WALL)return false;
 		}
 	
 		//填充数组
@@ -249,27 +275,40 @@ bool pushbox(int x, int y, int dx, int dy){
 			if (cx == x && cy == y)break;
 			map[cx][cy] = map[cx - dx][cy - dy];
 		}
-		map[cx][cy] = BLOCK_AIR;
+		map[cx][cy].type = BLOCK_AIR;
+		map[cx][cy].data = 0;
 	}
 	return true;
 }
 
+//绘制屏幕内容
 void drawscr(){
-	
 	SDL_Rect dst = { LEFTLEN-1, TOPLEN-1, SCRWID*50+2, SCRHEI*50+2 };
 
 	SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
 	SDL_RenderFillRect(ren, &dst);
+	dst.x = SCRWID*50+2*LEFTLEN+1;
+	dst.y = TOPLEN;
+	dst.w = TEXTLEN;
+	dst.h = FONTSIZE;
+	SDL_RenderFillRect(ren, &dst);
+
+	char text[15];
+	sprintf(text, u8"步数%d", stepCount);
+
+	DrawText(font, text, SCRWID*50+2*LEFTLEN, TOPLEN, 0, 0, 0);
 
 	dst.w = 50, dst.h = 50;
 	setRectPos(&dst, playerx, playery);
 	SDL_RenderCopy(ren, playerpic, NULL, &dst);
 
+	unsigned int drawx = MIN(mapsizex, SCRWID), drawy = MIN(mapsizey, SCRHEI);
+
 	SDL_Texture* srcpic = NULL;
-	for (int x = camerax; x < camerax+10; x++) {
-		for (int y = cameray; y < cameray+10; y++) {
+	for (int x = camerax; x < camerax+drawx; x++) {
+		for (int y = cameray; y < cameray+drawy; y++) {
 			setRectPos(&dst, x, y);
-			if(map[x][y] < BLOCK_TOTAL)srcpic = pic[map[x][y]];
+			if(map[x][y].type < BLOCK_TOTAL)srcpic = pic[map[x][y].type];
 			else srcpic = errorpic;
 			SDL_RenderCopy(ren, srcpic, NULL, &dst);
 			if (goal[x][y] != BLOCK_AIR) {
@@ -283,10 +322,10 @@ void drawscr(){
 	}
 
 	SDL_SetRenderDrawColor(ren, 255, 0, 0, 255);
-	if(camerax == 0)SDL_RenderDrawLine(ren, LEFTLEN-1, TOPLEN-1, LEFTLEN-1, SCRHEI*50+TOPLEN);
-	if(cameray == 0)SDL_RenderDrawLine(ren, LEFTLEN-1, TOPLEN-1, SCRWID*50+LEFTLEN, TOPLEN-1);
-	if(camerax+SCRWID == mapsizex)SDL_RenderDrawLine(ren, SCRWID*50+LEFTLEN, TOPLEN-1, SCRWID*50+LEFTLEN, SCRHEI*50+TOPLEN);
-	if(cameray+SCRHEI == mapsizey)SDL_RenderDrawLine(ren, LEFTLEN-1, SCRHEI*50+TOPLEN, SCRWID*50+LEFTLEN, SCRHEI*50+TOPLEN);
+	if(camerax == 0)SDL_RenderDrawLine(ren, LEFTLEN-1, TOPLEN-1, LEFTLEN-1, drawy*50+TOPLEN);
+	if(cameray == 0)SDL_RenderDrawLine(ren, LEFTLEN-1, TOPLEN-1, drawx*50+LEFTLEN, TOPLEN-1);
+	if(camerax+drawx == mapsizex)SDL_RenderDrawLine(ren, drawx*50+LEFTLEN, TOPLEN-1, drawx*50+LEFTLEN, drawy*50+TOPLEN);
+	if(cameray+drawy == mapsizey)SDL_RenderDrawLine(ren, LEFTLEN-1, drawy*50+TOPLEN, drawx*50+LEFTLEN, drawy*50+TOPLEN);
 
 	SDL_RenderPresent(ren);
 }
@@ -302,34 +341,39 @@ void loadmap() {
 
 	while(fgetc(fp)!='\n');
 
-	map = (int**)calloc(mapsizex, sizeof(void*));
-	datamap = (int**)calloc(mapsizex, sizeof(void*));
-	goal = (int**)calloc(mapsizex, sizeof(void*));
+	map = (block**)calloc(mapsizex, sizeof(void*));
+	goal = (blocktype**)calloc(mapsizex, sizeof(void*));
 
-	for (int i = 0; i < mapsizex; i++)map[i] = (int*)calloc(mapsizey, sizeof(int));
-	for (int i = 0; i < mapsizex; i++)datamap[i] = (int*)calloc(mapsizey, sizeof(int));
-	for (int i = 0; i < mapsizex; i++)goal[i] = (int*)calloc(mapsizey, sizeof(int));
+	for (int i = 0; i < mapsizex; i++)map[i] = (block*)calloc(mapsizey, sizeof(block));
+	for (int i = 0; i < mapsizex; i++)goal[i] = (blocktype*)calloc(mapsizey, sizeof(blocktype));
 
 	if (fp == NULL)return;
+
+	/// map
 	for (int y = 0; y < mapsizey; y++) {
-		for (int x = 0; x < mapsizex-1; x++) {
-			fscanf(fp, "%d,", map[x] + y);
-		}
-		fscanf(fp, "%d", map[mapsizex-1] + y);
-	}
+	for (int x = 0; x < mapsizex; x++) {
+			fscanf(fp, "%d,", &map[x][y].type);
+	}}
 
 	fscanf(fp, "%d,%d", &playerx, &playery);
+	if(playerx >= mapsizex)playerx = 0;
+	if(playery >= mapsizex)playery = 0;
 
 	while(fgetc(fp)!='\n');
 
+	/// goal
 	for (int y = 0; y < mapsizey; y++) {
-		for (int x = 0; x < mapsizex-1; x++) {
-			fscanf(fp, "%d,", goal[x] + y);
-		}
-		fscanf(fp, "%d", goal[mapsizex-1] + y);
-	}
+	for (int x = 0; x < mapsizex; x++) {
+			fscanf(fp, "%d,", &goal[x][y]);
+	}}
 
 	while(fgetc(fp)!='\n');
+
+	/// datamap
+	for (int y = 0; y < mapsizey; y++) {
+	for (int x = 0; x < mapsizex; x++) {
+			fscanf(fp, "%d,", &map[x][y].data);
+	}}
 
 	fclose(fp);
 }
