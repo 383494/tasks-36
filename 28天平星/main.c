@@ -1,4 +1,5 @@
-// 2022/3/18
+/// 2022/3/20
+/// 贴图作者：@canned
 #include<SDL2/SDL.h>
 #include<SDL2/SDL_ttf.h>
 #include<SDL2/SDL_image.h>
@@ -10,6 +11,8 @@
 #undef MAX
 #define MIN(a,b) ((a)<(b)?(a):(b))
 #define MAX(a,b) ((a)>(b)?(a):(b))
+#define getdx(pos) (((pos)%2)*((pos)/2*2-1))
+#define getdy(pos) ((((pos)+1)%2)*(((pos)+1)/2*2-1))
 
 const int SCRWID = 10;//*50
 const int SCRHEI = 10;//*50
@@ -44,7 +47,7 @@ blocktype **goal = NULL; //BLOCK_AIR==未指定
 int mapsizex = 0, mapsizey = 0;
 
 SDL_Texture* pic[BLOCK_TOTAL] = { NULL };
-SDL_Texture* playerpic = NULL, *errorpic = NULL;
+SDL_Texture* playerpic[5] = {}, *errorpic = NULL;
 TTF_Font *font = NULL;
 
 void quitall() {
@@ -78,12 +81,14 @@ void DrawText(TTF_Font* font, const char* text, int x, int y, int r, int g, int 
 }
 #endif
 
-unsigned int playerx = 0, playery = 0;
+unsigned int playerx = 0, playery = 0, playerpos = 4;
+unsigned int changetick = 0;
 unsigned int camerax = 0, cameray = 0;
 unsigned int leftGoals = 0;//剩余目标数
 unsigned int stepCount = 0;//步数
+unsigned int tick = 0;
 
-bool playermove(int dx, int dy);//dx*dy==0,dx+dy!=0
+bool playermove(int pos);//dx*dy==0,dx+dy!=0
 bool pushbox(int x, int y, int dx, int dy);
 void drawscr();
 
@@ -146,14 +151,19 @@ int main(int argc, char* argv[])
 	TTF_SetFontStyle(font,TTF_STYLE_NORMAL);
 
 	// 加载图片
-	char filename[15];
+	char filename[17];
 	for (int i = 0; i < BLOCK_TOTAL; i++) {
 		sprintf(filename, "img/%d.png", i);
 		pic[i] = IMG_LoadTexture(ren, filename);
 		SDL_SetTextureBlendMode(pic[i], SDL_BLENDMODE_BLEND);
 	}
-	playerpic = IMG_LoadTexture(ren, "img/player.png");
-	SDL_SetTextureBlendMode(playerpic, SDL_BLENDMODE_BLEND);
+	for (int i = 0; i < 4;) {
+		sprintf(filename, "img/player%d.png", i);
+		playerpic[++i] = IMG_LoadTexture(ren, filename);
+	}
+	*playerpic = IMG_LoadTexture(ren, "img/player.png");
+
+	SDL_SetTextureBlendMode(*playerpic, SDL_BLENDMODE_BLEND);
 	errorpic = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, 2, 2);
 	SDL_SetRenderTarget(ren, errorpic);
 	SDL_SetRenderDrawColor(ren, 163, 73, 164, 255);
@@ -168,17 +178,24 @@ int main(int argc, char* argv[])
 	camerax = MAX(MIN(playerx, mapsizex-SCRWID/2), SCRWID/2) - SCRWID/2;
 	cameray = MAX(MIN(playery, mapsizey-SCRHEI/2), SCRHEI/2) - SCRHEI/2;
 
-	SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
-	SDL_RenderClear(ren);
+//	SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+//	SDL_RenderClear(ren);
 
 	SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
 	SDL_RenderDrawLine(ren, SCRWID*50+2*LEFTLEN, 0, SCRWID*50+2*LEFTLEN, SCRHEI*50+2*TOPLEN);
 	drawscr();
-
+	SDL_RenderPresent(ren);
 	SDL_bool looping = SDL_TRUE;
 	while (looping) {
 		SDL_Delay(20);
-		//tick++;
+		tick++;
+		if(changetick == tick){
+			SDL_Rect dst = {(playerx-camerax)*50+LEFTLEN, 
+					(playery-cameray)*50+TOPLEN
+					, 50, 50};
+			SDL_RenderCopy(ren, *playerpic, NULL, &dst);
+			SDL_RenderPresent(ren);
+		}
 		while (SDL_PollEvent(&ev)) {
 			switch (ev.type) {
 			case SDL_QUIT:
@@ -188,16 +205,16 @@ int main(int argc, char* argv[])
 			case SDL_KEYDOWN:
 				switch (ev.key.keysym.scancode) {
 				case SDL_SCANCODE_W:
-					playermove(0, -1);
+					playermove(0);
 					break;
 				case SDL_SCANCODE_A:
-					playermove(-1, 0);
+					playermove(1);
 					break;
 				case SDL_SCANCODE_S:
-					playermove(0, 1);
+					playermove(2);
 					break;
 				case SDL_SCANCODE_D:
-					playermove(1, 0);
+					playermove(3);
 					break;
 				default:break;
 				}
@@ -207,11 +224,6 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	for (int i = 0; i < BLOCK_TOTAL; i++) {
-		if (pic[i] != NULL)
-			SDL_DestroyTexture(pic[i]);
-	}
-
 	for(int x = 0; x < mapsizex; x++){
 		free(map[x]);
 		free(goal[x]);
@@ -219,11 +231,16 @@ int main(int argc, char* argv[])
 	free(map);
 	free(goal);
 
+	for (int i = 0; i < BLOCK_TOTAL; i++) {
+		if (pic[i] != NULL)
+			SDL_DestroyTexture(pic[i]);
+	}
+
 	for(int i = 0; i < BLOCK_TOTAL; i++){
 		if(pic[i] != NULL)SDL_DestroyTexture(pic[i]);
 	}
-	if(playerpic != NULL)
-		SDL_DestroyTexture(playerpic);
+	if(*playerpic != NULL)
+		SDL_DestroyTexture(*playerpic);
 	SDL_DestroyTexture(errorpic);
 
 	TTF_Quit();
@@ -237,7 +254,10 @@ void setRectPos(SDL_Rect* rect, int xn, int yn){
 	rect->y = 50 * (yn - cameray) + TOPLEN;
 }
 
-bool playermove(int dx, int dy) {
+bool playermove(int pos) {
+	int dx = getdx(pos),dy = getdy(pos);
+	playerpos = pos;
+	changetick = tick+50;
 	if(!pushbox(playerx, playery, dx, dy))return false;
 	
 	playerx += dx, playery += dy;
@@ -268,12 +288,17 @@ bool pushbox(int x, int y, int dx, int dy){
 			}
 			if (map[cx][cy].type == BLOCK_WALL)return false;
 		}
-	
+
 		//填充数组
 		while (true) {
 			cx -= dx, cy -= dy;
 			if (cx == x && cy == y)break;
-			map[cx][cy] = map[cx - dx][cy - dy];
+			if(goal[cx][cy] != BLOCK_AIR)
+				if(goal[cx][cy] == map[cx-dx][cy-dy].type &&
+					goal[cx][cy] != map[cx][cy].type)leftGoals--;
+				else if(goal[cx][cy] == map[cx][cy].type &&
+					goal[cx][cy] != map[cx-dx][cy-dy].type)leftGoals++;
+			map[cx][cy] = map[cx-dx][cy-dy];
 		}
 		map[cx][cy].type = BLOCK_AIR;
 		map[cx][cy].data = 0;
@@ -290,17 +315,18 @@ void drawscr(){
 	dst.x = SCRWID*50+2*LEFTLEN+1;
 	dst.y = TOPLEN;
 	dst.w = TEXTLEN;
-	dst.h = FONTSIZE;
+	dst.h = FONTSIZE*2;
 	SDL_RenderFillRect(ren, &dst);
 
 	char text[15];
 	sprintf(text, u8"步数%d", stepCount);
-
 	DrawText(font, text, SCRWID*50+2*LEFTLEN, TOPLEN, 0, 0, 0);
+	sprintf(text, u8"剩余%d", leftGoals);
+	DrawText(font, text, SCRWID*50+2*LEFTLEN, TOPLEN+FONTSIZE, 0, 0, 0);
 
 	dst.w = 50, dst.h = 50;
 	setRectPos(&dst, playerx, playery);
-	SDL_RenderCopy(ren, playerpic, NULL, &dst);
+	SDL_RenderCopy(ren, playerpic[(playerpos+1)%5], NULL, &dst);
 
 	unsigned int drawx = MIN(mapsizex, SCRWID), drawy = MIN(mapsizey, SCRHEI);
 
@@ -310,8 +336,17 @@ void drawscr(){
 			setRectPos(&dst, x, y);
 			if(map[x][y].type < BLOCK_TOTAL)srcpic = pic[map[x][y].type];
 			else srcpic = errorpic;
-			SDL_RenderCopy(ren, srcpic, NULL, &dst);
-			if (goal[x][y] != BLOCK_AIR) {
+
+			SDL_RendererFlip flip = SDL_FLIP_NONE;
+			double angle = 0;
+			switch(map[x][y].type){
+				case BLOCK_PISTON:
+					angle = 90 * (map[x][y].data & 0x3);
+				default:break;
+			}
+			
+			SDL_RenderCopyEx(ren, srcpic, NULL, &dst, angle, NULL, flip);
+			if ((goal[x][y] != BLOCK_AIR) && (map[x][y].type == BLOCK_AIR)) {
 				if(goal[x][y] < BLOCK_TOTAL)srcpic = pic[goal[x][y]];
 				else srcpic = errorpic;
 				SDL_SetTextureAlphaMod(srcpic, 255 / 3);
@@ -365,8 +400,11 @@ void loadmap() {
 	for (int y = 0; y < mapsizey; y++) {
 	for (int x = 0; x < mapsizex; x++) {
 			fscanf(fp, "%d,", &goal[x][y]);
+			if((goal[x][y] != BLOCK_AIR) && 
+				(goal[x][y] != map[x][y].type))leftGoals++;
 	}}
 
+	fseek(fp, 2L, SEEK_CUR);
 	while(fgetc(fp)!='\n');
 
 	/// datamap
