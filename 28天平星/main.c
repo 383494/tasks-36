@@ -1,4 +1,4 @@
-/// 2022/3/20
+/// 2022/3/23
 /// 贴图作者：@canned
 #include<SDL2/SDL.h>
 #include<SDL2/SDL_ttf.h>
@@ -13,13 +13,6 @@
 #define MAX(a,b) ((a)>(b)?(a):(b))
 #define getdx(pos) (((pos)%2)*((pos)/2*2-1))
 #define getdy(pos) ((((pos)+1)%2)*(((pos)+1)/2*2-1))
-
-const int SCRWID = 10;//*50
-const int SCRHEI = 10;//*50
-const int LEFTLEN = 10;//px
-const int TOPLEN = 10;
-const int FONTSIZE = 30;//字号
-const int TEXTLEN = 5*FONTSIZE;//右侧提示文字长度
 
 SDL_Window* win = NULL;
 SDL_Surface* winSurface = NULL;
@@ -39,8 +32,22 @@ typedef enum {
 
 typedef struct{
 	blocktype type;
-	int data;
+	int data;//data^0x3为方向
+	bool charged;//被充能的
 } block;
+
+typedef struct{
+	blocktype* list;
+	unsigned int length;	
+} btlist;
+
+const int SCRWID = 10;//*50
+const int SCRHEI = 10;//*50
+const int LEFTLEN = 10;//px
+const int TOPLEN = 10;
+const int FONTSIZE = 30;//字号
+const int TEXTLEN = 5*FONTSIZE;//右侧提示文字长度
+const btlist rsblocks = {{BLOCK_PISTON},1};
 
 block** map = NULL;
 blocktype **goal = NULL; //BLOCK_AIR==未指定
@@ -62,7 +69,6 @@ void quitall() {
 	SDL_Quit();
 }
 
-#ifdef SDL_TTF_H_
 void DrawText(TTF_Font* font, const char* text, int x, int y, int r, int g, int b)
 {
 	SDL_Color color = { r, g, b };
@@ -79,7 +85,6 @@ void DrawText(TTF_Font* font, const char* text, int x, int y, int r, int g, int 
 	SDL_RenderCopy(ren, text_texture, &dest, &rect);
 	SDL_DestroyTexture(text_texture);
 }
-#endif
 
 unsigned int playerx = 0, playery = 0, playerpos = 4;
 unsigned int changetick = 0;
@@ -87,9 +92,12 @@ unsigned int camerax = 0, cameray = 0;
 unsigned int leftGoals = 0;//剩余目标数
 unsigned int stepCount = 0;//步数
 unsigned int tick = 0;
+bool looping = true;
 
 bool playermove(int pos);//dx*dy==0,dx+dy!=0
 bool pushbox(int x, int y, int dx, int dy);
+bool isInList(blocktype item, btlist itemlist);
+void updateBlock(int x, int y);
 void drawscr();
 
 void setRectPos(SDL_Rect* rect, int xn, int yn);
@@ -178,14 +186,12 @@ int main(int argc, char* argv[])
 	camerax = MAX(MIN(playerx, mapsizex-SCRWID/2), SCRWID/2) - SCRWID/2;
 	cameray = MAX(MIN(playery, mapsizey-SCRHEI/2), SCRHEI/2) - SCRHEI/2;
 
-//	SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
-//	SDL_RenderClear(ren);
+	SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+	SDL_RenderClear(ren);
 
 	SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
 	SDL_RenderDrawLine(ren, SCRWID*50+2*LEFTLEN, 0, SCRWID*50+2*LEFTLEN, SCRHEI*50+2*TOPLEN);
 	drawscr();
-	SDL_RenderPresent(ren);
-	SDL_bool looping = SDL_TRUE;
 	while (looping) {
 		SDL_Delay(20);
 		tick++;
@@ -199,7 +205,7 @@ int main(int argc, char* argv[])
 		while (SDL_PollEvent(&ev)) {
 			switch (ev.type) {
 			case SDL_QUIT:
-				looping = SDL_FALSE;
+				looping = false;
 				break;
 
 			case SDL_KEYDOWN:
@@ -261,7 +267,9 @@ bool playermove(int pos) {
 	if(!pushbox(playerx, playery, dx, dy))return false;
 	
 	playerx += dx, playery += dy;
-	if (playerx < 0 || playerx >= mapsizex || playery < 0 || playery >= mapsizey){
+	if (playerx < 0 || playerx >= mapsizex ||
+		 playery < 0 || playery >= mapsizey){
+
 		playerx -= dx, playery -= dy;
 		return false;
 	}
@@ -293,17 +301,42 @@ bool pushbox(int x, int y, int dx, int dy){
 		while (true) {
 			cx -= dx, cy -= dy;
 			if (cx == x && cy == y)break;
-			if(goal[cx][cy] != BLOCK_AIR)
+			if(goal[cx][cy] != BLOCK_AIR){
 				if(goal[cx][cy] == map[cx-dx][cy-dy].type &&
 					goal[cx][cy] != map[cx][cy].type)leftGoals--;
 				else if(goal[cx][cy] == map[cx][cy].type &&
 					goal[cx][cy] != map[cx-dx][cy-dy].type)leftGoals++;
+				
+				if(leftGoals == 0){
+					SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION,
+						u8"恭喜你", u8"你赢了", win);
+					looping = false;
+				}
+			}
 			map[cx][cy] = map[cx-dx][cy-dy];
 		}
 		map[cx][cy].type = BLOCK_AIR;
 		map[cx][cy].data = 0;
 	}
 	return true;
+}
+
+bool isInList(blocktype item, btlist itemlist){
+	while(itemlist.length--)if(itemlist.list[itemlist.length]==item)return true;
+	return false;
+}
+
+void updateBlock(int x, int y){
+	switch(map[x][y].type){
+		case BLOCK_PISTON:
+			if((x==0?false:map[x-1][y].charged) ||
+				(y==0?false:map[x][y-1].charged) ||
+				(x==mapsizex-1?false:map[x+1][y].charged) ||
+				(y==mapsizey-1?false:map[x][y+1].charged)){
+
+			}
+		default:break;
+	}
 }
 
 //绘制屏幕内容
