@@ -1,4 +1,4 @@
-/// 2022/3/23
+/// 2022/4/8
 /// 贴图作者：@canned
 #include<SDL2/SDL.h>
 #include<SDL2/SDL_ttf.h>
@@ -21,25 +21,27 @@ SDL_Texture* tex = NULL;
 SDL_Event ev;
 
 typedef enum {
-	BLOCK_AIR
-	, BLOCK_WALL
-	, BLOCK_BOX
-	, BLOCK_STONE//能推，但没什么用
-	, BLOCK_PISTON//todo,PISTON_ARM是特殊值之一
-	, BLOCK_REDSTONE
-	, BLOCK_TOTAL
+	BLOCK_AIR		= 0
+	, BLOCK_WALL 	= 1
+	, BLOCK_BOX 	= 2
+	, BLOCK_STONE	= 3//能推，但没什么用
+	, BLOCK_PISTON	= 4//todo,PISTON_ARM是特殊值之一
+	, BLOCK_REDSTONE= 5
+	, BLOCK_TOTAL	= 6
 } blocktype;
 
 typedef struct{
 	blocktype type;
 	int data;//data^0x3为方向
-	bool charged;//被充能的
-} block;
+	union{
+		int type;
 
-typedef struct{
-	blocktype* list;
-	unsigned int length;	
-} btlist;
+		struct{
+			int type;	
+			bool charged;
+		} redstone;
+	} bdata;
+} block;
 
 const int SCRWID = 10;//*50
 const int SCRHEI = 10;//*50
@@ -47,7 +49,7 @@ const int LEFTLEN = 10;//px
 const int TOPLEN = 10;
 const int FONTSIZE = 30;//字号
 const int TEXTLEN = 5*FONTSIZE;//右侧提示文字长度
-const btlist rsblocks = {{BLOCK_PISTON},1};
+const blocktype rsblocks[] = {BLOCK_PISTON};
 
 block** map = NULL;
 blocktype **goal = NULL; //BLOCK_AIR==未指定
@@ -96,7 +98,7 @@ bool looping = true;
 
 bool playermove(int pos);//dx*dy==0,dx+dy!=0
 bool pushbox(int x, int y, int dx, int dy);
-bool isInList(blocktype item, btlist itemlist);
+bool isInList(blocktype item, const blocktype itemlist[]);
 void updateBlock(int x, int y);
 void drawscr();
 
@@ -222,7 +224,9 @@ int main(int argc, char* argv[])
 				case SDL_SCANCODE_D:
 					playermove(3);
 					break;
-				default:break;
+				default:
+				//	printf("%d",isInList(BLOCK_PISTON, rsblocks));
+					break;
 				}
 				break;
 			default:break;
@@ -301,6 +305,7 @@ bool pushbox(int x, int y, int dx, int dy){
 		while (true) {
 			cx -= dx, cy -= dy;
 			if (cx == x && cy == y)break;
+		
 			if(goal[cx][cy] != BLOCK_AIR){
 				if(goal[cx][cy] == map[cx-dx][cy-dy].type &&
 					goal[cx][cy] != map[cx][cy].type)leftGoals--;
@@ -314,6 +319,12 @@ bool pushbox(int x, int y, int dx, int dy){
 				}
 			}
 			map[cx][cy] = map[cx-dx][cy-dy];
+			
+			if(cx>0)updateBlock(cx-1,cy);
+			if(cy>0)updateBlock(cx,cy-1);
+			if(cx<mapsizex-1)updateBlock(cx+1,cy);
+			if(cy<mapsizey-1)updateBlock(cx,cy+1);
+		//	puts("");
 		}
 		map[cx][cy].type = BLOCK_AIR;
 		map[cx][cy].data = 0;
@@ -321,21 +332,20 @@ bool pushbox(int x, int y, int dx, int dy){
 	return true;
 }
 
-bool isInList(blocktype item, btlist itemlist){
-	while(itemlist.length--)if(itemlist.list[itemlist.length]==item)return true;
+bool isInList(blocktype item, const blocktype itemlist[]){
+	int i = 0;
+	while(itemlist[i])if(itemlist[i++]==item)return true;
 	return false;
 }
 
 void updateBlock(int x, int y){
-	switch(map[x][y].type){
-		case BLOCK_PISTON:
-			if((x==0?false:map[x-1][y].charged) ||
-				(y==0?false:map[x][y-1].charged) ||
-				(x==mapsizex-1?false:map[x+1][y].charged) ||
-				(y==mapsizey-1?false:map[x][y+1].charged)){
-
-			}
-		default:break;
+	if(isInList(map[x][y].type, rsblocks)){
+		if((x==0?false:map[x-1][y].bdata.redstone.charged) ||
+			(y==0?false:map[x][y-1].bdata.redstone.charged) ||
+			(x==mapsizex-1?false:map[x+1][y].bdata.redstone.charged) ||
+			(y==mapsizey-1?false:map[x][y+1].bdata.redstone.charged)){
+			puts("w");	
+		}
 	}
 }
 
@@ -444,6 +454,7 @@ void loadmap() {
 	for (int y = 0; y < mapsizey; y++) {
 	for (int x = 0; x < mapsizex; x++) {
 			fscanf(fp, "%d,", &map[x][y].data);
+			if(map[x][y].type == BLOCK_REDSTONE)map[x][y].bdata.redstone.charged = true;
 	}}
 
 	fclose(fp);
