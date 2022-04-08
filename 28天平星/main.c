@@ -33,14 +33,7 @@ typedef enum {
 typedef struct{
 	blocktype type;
 	int data;//data^0x3为方向
-	union{
-		int type;
-
-		struct{
-			int type;	
-			bool charged;
-		} redstone;
-	} bdata;
+			//data^0x4 红石：充能
 } block;
 
 const int SCRWID = 10;//*50
@@ -49,7 +42,8 @@ const int LEFTLEN = 10;//px
 const int TOPLEN = 10;
 const int FONTSIZE = 30;//字号
 const int TEXTLEN = 5*FONTSIZE;//右侧提示文字长度
-const blocktype rsblocks[] = {BLOCK_PISTON};
+const blocktype rsblocks[] = {BLOCK_PISTON};//可被激活方块
+const blocktype constblocks[] = {BLOCK_WALL};//不可推动方块
 
 block** map = NULL;
 blocktype **goal = NULL; //BLOCK_AIR==未指定
@@ -225,7 +219,6 @@ int main(int argc, char* argv[])
 					playermove(3);
 					break;
 				default:
-				//	printf("%d",isInList(BLOCK_PISTON, rsblocks));
 					break;
 				}
 				break;
@@ -298,9 +291,10 @@ bool pushbox(int x, int y, int dx, int dy){
 				cx += dx, cy += dy;
 				break;
 			}
-			if (map[cx][cy].type == BLOCK_WALL)return false;
+			if (isInList(map[cx][cy].type, constblocks))return false;
 		}
 
+		int tmpx=cx, tmpy=cy;
 		//填充数组
 		while (true) {
 			cx -= dx, cy -= dy;
@@ -319,13 +313,19 @@ bool pushbox(int x, int y, int dx, int dy){
 				}
 			}
 			map[cx][cy] = map[cx-dx][cy-dy];
-			
-			if(cx>0)updateBlock(cx-1,cy);
-			if(cy>0)updateBlock(cx,cy-1);
-			if(cx<mapsizex-1)updateBlock(cx+1,cy);
-			if(cy<mapsizey-1)updateBlock(cx,cy+1);
-		//	puts("");
 		}
+		cx=tmpx, cy=tmpy;
+			
+		while (true) {
+			cx -= dx, cy -= dy;
+			if (cx == x && cy == y)break;
+			
+			if(cx>0 && dx<=0)updateBlock(cx-1,cy);
+			if(cy>0 && dy<=0)updateBlock(cx,cy-1);
+			if(cx<mapsizex-1 && dx>=0)updateBlock(cx+1,cy);
+			if(cy<mapsizey-1 && dy>=0)updateBlock(cx,cy+1);
+		}
+
 		map[cx][cy].type = BLOCK_AIR;
 		map[cx][cy].data = 0;
 	}
@@ -340,11 +340,15 @@ bool isInList(blocktype item, const blocktype itemlist[]){
 
 void updateBlock(int x, int y){
 	if(isInList(map[x][y].type, rsblocks)){
-		if((x==0?false:map[x-1][y].bdata.redstone.charged) ||
-			(y==0?false:map[x][y-1].bdata.redstone.charged) ||
-			(x==mapsizex-1?false:map[x+1][y].bdata.redstone.charged) ||
-			(y==mapsizey-1?false:map[x][y+1].bdata.redstone.charged)){
-			puts("w");	
+		if((x==0?false:map[x-1][y].data^0x4) ||
+			(y==0?false:map[x][y-1].data^0x4) ||
+			(x==mapsizex-1?false:map[x+1][y].data^0x4) ||
+			(y==mapsizey-1?false:map[x][y+1].data^0x4) ){
+			switch(map[x][y].type){
+				case BLOCK_PISTON:
+					
+				break;
+			}
 		}
 	}
 }
@@ -454,7 +458,7 @@ void loadmap() {
 	for (int y = 0; y < mapsizey; y++) {
 	for (int x = 0; x < mapsizex; x++) {
 			fscanf(fp, "%d,", &map[x][y].data);
-			if(map[x][y].type == BLOCK_REDSTONE)map[x][y].bdata.redstone.charged = true;
+			if(map[x][y].type == BLOCK_REDSTONE)map[x][y].data &= 0x4;//设置为充能状态
 	}}
 
 	fclose(fp);
