@@ -1,4 +1,4 @@
-/// 2022/4/8
+/// 2022/4/9
 /// 贴图作者：@canned
 #include<SDL2/SDL.h>
 #include<SDL2/SDL_ttf.h>
@@ -11,7 +11,7 @@
 #undef MAX
 #define MIN(a,b) ((a)<(b)?(a):(b))
 #define MAX(a,b) ((a)>(b)?(a):(b))
-#define getdx(pos) (((pos)%2)*((pos)/2*2-1))
+#define getdx(pos) (((pos)%2)*((pos)/2*2-1))	//0w1a2s3d
 #define getdy(pos) ((((pos)+1)%2)*(((pos)+1)/2*2-1))
 
 SDL_Window* win = NULL;
@@ -21,13 +21,15 @@ SDL_Texture* tex = NULL;
 SDL_Event ev;
 
 typedef enum {
-	BLOCK_AIR		= 0
-	, BLOCK_WALL 	= 1
-	, BLOCK_BOX 	= 2
-	, BLOCK_STONE	= 3//能推，但没什么用
-	, BLOCK_PISTON	= 4//todo,PISTON_ARM是特殊值之一
-	, BLOCK_REDSTONE= 5
-	, BLOCK_TOTAL	= 6
+	BLOCK_AIR
+	, BLOCK_WALL
+	, BLOCK_BOX
+	, BLOCK_STONE//能推，但没什么用
+	, BLOCK_REDSTONE
+	, BLOCK_PISTON
+	, BLOCK_PISTON_EXT//伸出的活塞
+	, BLOCK_PISTON_ARM//活塞臂
+	, BLOCK_TOTAL
 } blocktype;
 
 typedef struct{
@@ -339,18 +341,35 @@ bool isInList(blocktype item, const blocktype itemlist[]){
 }
 
 void updateBlock(int x, int y){
-	if(isInList(map[x][y].type, rsblocks)){
-		if((x==0?false:map[x-1][y].data^0x4) ||
-			(y==0?false:map[x][y-1].data^0x4) ||
-			(x==mapsizex-1?false:map[x+1][y].data^0x4) ||
-			(y==mapsizey-1?false:map[x][y+1].data^0x4) ){
-			switch(map[x][y].type){
-				case BLOCK_PISTON:
-					
-				break;
-			}
+		bool cgd = 
+			(x!=0 && map[x-1][y].data&0x4) ||
+			(y!=0 && map[x][y-1].data&0x4) ||
+			(x!=mapsizex-1 && map[x+1][y].data&0x4) ||
+			(y!=mapsizey-1 && map[x][y+1].data&0x4) ;
+		//是否充能	
+	//intf("%d%d,%d,%d",x,y,cgd,map[x][y].type);puts("");	
+		switch(map[x][y].type){
+			case BLOCK_PISTON://不break
+			case BLOCK_PISTON_EXT:
+				int dx=getdx(map[x][y].data & 0x3), 
+					dy=getdy(map[x][y].data & 0x3);
+				if(map[x][y].type==BLOCK_PISTON && cgd &&
+					x+dx>=0 && x+dx<=mapsizex-1 &&
+					y+dy>=0 && y+dy<=mapsizey-1){
+					if(pushbox(x, y, dx, dy)){
+						map[x][y].type = BLOCK_PISTON_EXT;
+						map[x][y].data = map[x+dx][y+dy].data;
+						map[x+dx][y+dy].type = BLOCK_PISTON_ARM;
+					}
+				}
+				else if(map[x][y].type==BLOCK_PISTON_EXT && !cgd){
+					map[x][y].type = BLOCK_PISTON;
+					map[x+dx][y+dy].type = BLOCK_AIR;
+				}
+			break;
+			default:break;
 		}
-	}
+	
 }
 
 //绘制屏幕内容
@@ -386,11 +405,7 @@ void drawscr(){
 
 			SDL_RendererFlip flip = SDL_FLIP_NONE;
 			double angle = 0;
-			switch(map[x][y].type){
-				case BLOCK_PISTON:
-					angle = 90 * (map[x][y].data & 0x3);
-				default:break;
-			}
+			angle = -90 * (map[x][y].data & 0x3);
 			
 			SDL_RenderCopyEx(ren, srcpic, NULL, &dst, angle, NULL, flip);
 			if ((goal[x][y] != BLOCK_AIR) && (map[x][y].type == BLOCK_AIR)) {
@@ -458,7 +473,7 @@ void loadmap() {
 	for (int y = 0; y < mapsizey; y++) {
 	for (int x = 0; x < mapsizex; x++) {
 			fscanf(fp, "%d,", &map[x][y].data);
-			if(map[x][y].type == BLOCK_REDSTONE)map[x][y].data &= 0x4;//设置为充能状态
+			if(map[x][y].type == BLOCK_REDSTONE)map[x][y].data |= 0x4;//设置为充能状态
 	}}
 
 	fclose(fp);
