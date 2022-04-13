@@ -52,6 +52,7 @@ const blocktype tspblocks[] = {BLOCK_AIR};//透明方块
 block** map = NULL;
 blocktype **goal = NULL; //BLOCK_AIR==未指定
 int mapsizex = 0, mapsizey = 0;
+int goalAlpha = 255/3; //绘制目标时的透明度
 
 SDL_Texture* pic[BLOCK_TOTAL] = { NULL };
 SDL_Texture* playerpic[5] = {}, *errorpic = NULL;
@@ -221,6 +222,16 @@ int main(int argc, char* argv[])
 					break;
 				case SDL_SCANCODE_D:
 					playermove(3);
+					break;
+				case SDL_SCANCODE_E:
+					goalAlpha+=15;
+					goalAlpha%=255;
+					drawscr();
+					break;
+				case SDL_SCANCODE_R:
+					goalAlpha-=15;
+					goalAlpha%=255;
+					drawscr();
 					break;
 				default:
 					break;
@@ -417,13 +428,13 @@ void drawscr(){
 			angle = -90 * (map[x][y].data & 0x3);
 			
 			SDL_RenderCopyEx(ren, srcpic, NULL, &dst, angle, NULL, flip);
-			if ((goal[x][y] != BLOCK_AIR) && (map[x][y].type == BLOCK_AIR)) {
+			//if ((goal[x][y] != BLOCK_AIR) && (map[x][y].type == BLOCK_AIR)) {
 				if(goal[x][y] < BLOCK_TOTAL)srcpic = pic[goal[x][y]];
 				else srcpic = errorpic;
-				SDL_SetTextureAlphaMod(srcpic, 255 / 3);
+				SDL_SetTextureAlphaMod(srcpic, goalAlpha);
 				SDL_RenderCopy(ren, srcpic, NULL, &dst);
 				SDL_SetTextureAlphaMod(srcpic, 255);
-			}
+			//}
 		}
 	}
 
