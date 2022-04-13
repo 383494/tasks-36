@@ -1,4 +1,4 @@
-/// 2022/4/9
+/// 2022/4/13
 /// 贴图作者：@canned
 #include<SDL2/SDL.h>
 #include<SDL2/SDL_ttf.h>
@@ -21,7 +21,7 @@ SDL_Texture* tex = NULL;
 SDL_Event ev;
 
 typedef enum {
-	BLOCK_AIR
+	BLOCK_AIR = 0
 	, BLOCK_WALL
 	, BLOCK_BOX
 	, BLOCK_STONE//能推，但没什么用
@@ -45,7 +45,9 @@ const int TOPLEN = 10;
 const int FONTSIZE = 30;//字号
 const int TEXTLEN = 5*FONTSIZE;//右侧提示文字长度
 const blocktype rsblocks[] = {BLOCK_PISTON};//可被激活方块
-const blocktype constblocks[] = {BLOCK_WALL};//不可推动方块
+const blocktype constblocks[] = {BLOCK_WALL
+	, BLOCK_PISTON_ARM, BLOCK_PISTON_EXT};//不可推动方块
+const blocktype tspblocks[] = {BLOCK_AIR};//透明方块
 
 block** map = NULL;
 blocktype **goal = NULL; //BLOCK_AIR==未指定
@@ -271,6 +273,13 @@ bool playermove(int pos) {
 
 		playerx -= dx, playery -= dy;
 		return false;
+	}
+	if (map[playerx][playery].type != BLOCK_AIR){
+		//如果你被非透明方块封住
+		if(playery>0 && map[playerx][playery-1].type == BLOCK_AIR)playery--;
+		else if(playerx>0 && map[playerx-1][playery].type == BLOCK_AIR)playerx--;
+		else if(playery<mapsizey-1 && map[playerx][playery+1].type == BLOCK_AIR)playery++;
+		else if(playerx<mapsizex-1 && map[playerx+1][playery].type == BLOCK_AIR)playerx++;
 	}
 
 	camerax = MAX(MIN(playerx, mapsizex-SCRWID/2), SCRWID/2) - SCRWID/2;
